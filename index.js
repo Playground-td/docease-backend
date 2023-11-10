@@ -13,10 +13,8 @@ dotenv.config();
 const client = new Client({});
 const app = express();
 
-// const CyclicDB = require("@cyclic.sh/dynamodb");
-// const db = CyclicDB("dull-lime-cod-robeCyclicDB");
 const CyclicDb = require("@cyclic.sh/dynamodb");
-const db = CyclicDb("successful-ant-zipperCyclicDB");
+const db = CyclicDb("nice-long-underwear-bassCyclicDB");
 
 const signAccessToken = (key) => {
   const jwtSecret = "wzPe7g19Yan27T2ATud1Kw==";
