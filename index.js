@@ -8,6 +8,7 @@ const { Client } = require("@googlemaps/google-maps-services-js");
 const { createHash, randomBytes } = require("crypto");
 const { Email } = require("./email/email");
 const { Upload, uploadFile } = require("./uploadFile");
+const mime = require("mime-types");
 
 dotenv.config();
 const client = new Client({});
