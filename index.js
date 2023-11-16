@@ -24,14 +24,35 @@ const signAccessToken = (key) => {
   });
 };
 
-// shuflfling the array
+
 function shuffleArray(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]]; // Swap elements
+    [array[i], array[j]] = [array[j], array[i]]; 
   }
 }
 
+const treatableDiseases = ['AIDS', 'Cancer', 'Ebola', 'Malaria', 'Tuberculosis', 'Yellow Fever'].sort();
+
+function binarySearch(arr, disease) {
+  let left = 0;
+  let right = arr.length - 1;
+
+  while (left <= right) {
+      const mid = left + Math.floor((right - left) / 2);
+      const midVal = arr[mid];
+
+      if (midVal === disease) {
+          return mid;
+      } else if (midVal < disease) {
+          left = mid + 1;
+      } else {
+          right = mid - 1;
+      }
+  }
+
+  return -1;
+}
 const corsOptions = {
   origin: "*",
   optionsSuccessStatus: 200,
@@ -107,7 +128,6 @@ app.post("/clients/new", async (req, res) => {
 
 // Get hospitals/health facilities within given radius using googlemaps
 app.get("/near-by-places", async (req, res) => {
-  console.log("req.query", req.query);
   const latitude = req.query.latitude;
   const longitude = req.query.longitude;
   const disease = req.query.disease;
@@ -116,15 +136,28 @@ app.get("/near-by-places", async (req, res) => {
     if (!latitude || !longitude) {
       return res.status(400).json({
         success: false,
-        message: "Please provide location co-ordinates",
+        message: "Please provide location coordinates",
       });
     }
-    if (!disease) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide a disease",
-      });
+
+    // Check if disease is provided and commonly treated in Uganda
+    if (disease) {
+      const formattedDisease = disease.charAt(0).toUpperCase() + disease.slice(1).toLowerCase();
+      const isTreatable = binarySearch(treatableDiseases, formattedDisease) !== -1;
+      
+      // If the disease is not treatable in Uganda, return a message indicating so
+      if (!isTreatable) {
+        return res.status(200).json({
+          success: true,
+          message: `The disease '${formattedDisease}' is not commonly treated in Uganda.`,
+          data: []
+        });
+      }
+    } else {
+      return res.status(400).json({ success: false, message: "Please provide a disease" });
     }
+
+    // Proceed with finding health facilities
     const healthFacilities = await client.placesNearby({
       params: {
         location: `${latitude}, ${longitude}`,
@@ -133,10 +166,9 @@ app.get("/near-by-places", async (req, res) => {
         types: ["hospital", "health"],
       },
     });
+
     if (healthFacilities.statusText !== "OK") {
-      return res
-        .status(400)
-        .json({ success: false, message: "could not find places" });
+      return res.status(400).json({ success: false, message: "Could not find places" });
     }
 
     // shuffle the array
@@ -144,7 +176,7 @@ app.get("/near-by-places", async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "get health successfully",
+      message: "Health facilities found successfully",
       data: healthFacilities.data,
     });
   } catch (error) {
@@ -152,7 +184,6 @@ app.get("/near-by-places", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error." });
   }
 });
-
 app.post("/users/forgot-password", async (req, res) => {
   try {
     const email = req.body.email;
