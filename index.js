@@ -24,31 +24,37 @@ const signAccessToken = (key) => {
   });
 };
 
-
 function shuffleArray(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]]; 
+    [array[i], array[j]] = [array[j], array[i]];
   }
 }
 
-const treatableDiseases = ['AIDS', 'Cancer', 'Ebola', 'Malaria', 'Tuberculosis', 'Yellow Fever'].sort();
+const treatableDiseases = [
+  "AIDS",
+  "Cancer",
+  "Ebola",
+  "Malaria",
+  "Tuberculosis",
+  "Yellow Fever",
+].sort();
 
 function binarySearch(arr, disease) {
   let left = 0;
   let right = arr.length - 1;
 
   while (left <= right) {
-      const mid = left + Math.floor((right - left) / 2);
-      const midVal = arr[mid];
+    const mid = left + Math.floor((right - left) / 2);
+    const midVal = arr[mid];
 
-      if (midVal === disease) {
-          return mid;
-      } else if (midVal < disease) {
-          left = mid + 1;
-      } else {
-          right = mid - 1;
-      }
+    if (midVal === disease) {
+      return mid;
+    } else if (midVal < disease) {
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
   }
 
   return -1;
@@ -142,19 +148,23 @@ app.get("/near-by-places", async (req, res) => {
 
     // Check if disease is provided and commonly treated in Uganda
     if (disease) {
-      const formattedDisease = disease.charAt(0).toUpperCase() + disease.slice(1).toLowerCase();
-      const isTreatable = binarySearch(treatableDiseases, formattedDisease) !== -1;
-      
+      const formattedDisease =
+        disease.charAt(0).toUpperCase() + disease.slice(1).toLowerCase();
+      const isTreatable =
+        binarySearch(treatableDiseases, formattedDisease) !== -1;
+
       // If the disease is not treatable in Uganda, return a message indicating so
       if (!isTreatable) {
         return res.status(200).json({
           success: true,
           message: `The disease '${formattedDisease}' is not commonly treated in Uganda.`,
-          data: []
+          data: [],
         });
       }
     } else {
-      return res.status(400).json({ success: false, message: "Please provide a disease" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Please provide a disease" });
     }
 
     // Proceed with finding health facilities
@@ -168,7 +178,9 @@ app.get("/near-by-places", async (req, res) => {
     });
 
     if (healthFacilities.statusText !== "OK") {
-      return res.status(400).json({ success: false, message: "Could not find places" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Could not find places" });
     }
 
     // shuffle the array
@@ -190,7 +202,7 @@ app.post("/users/forgot-password", async (req, res) => {
 
     if (!email) {
       return res
-        .status(200)
+        .status(400)
         .json({ success: false, message: "Please provide email" });
     }
     const user = await db.collection("doceaseclients").get(email);
@@ -229,7 +241,7 @@ app.post("/users/forgot-password", async (req, res) => {
     await new Email(email, subject).sendPasswordReset(resetURL, fullName);
 
     res.status(200).json({
-      status: "success",
+      success: true,
       message: "Password reset token sent to mail",
     });
   } catch (error) {
