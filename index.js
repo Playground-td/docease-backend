@@ -155,7 +155,7 @@ app.get("/near-by-places", async (req, res) => {
 
       // If the disease is not treatable in Uganda, return a message indicating so
       if (!isTreatable) {
-        return res.status(200).json({
+        return res.status(400).json({
           success: true,
           message: `The disease '${formattedDisease}' is not commonly treated in Uganda.`,
           data: [],
