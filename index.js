@@ -8,15 +8,14 @@ const { Client } = require("@googlemaps/google-maps-services-js");
 const { createHash, randomBytes } = require("crypto");
 const { Email } = require("./email/email");
 const { Upload, uploadFile } = require("./uploadFile");
+const mime = require("mime-types");
 
 dotenv.config();
 const client = new Client({});
 const app = express();
 
-// const CyclicDB = require("@cyclic.sh/dynamodb");
-// const db = CyclicDB("dull-lime-cod-robeCyclicDB");
 const CyclicDb = require("@cyclic.sh/dynamodb");
-const db = CyclicDb("successful-ant-zipperCyclicDB");
+const db = CyclicDb("nice-long-underwear-bassCyclicDB");
 
 const signAccessToken = (key) => {
   const jwtSecret = "wzPe7g19Yan27T2ATud1Kw==";
@@ -25,14 +24,41 @@ const signAccessToken = (key) => {
   });
 };
 
-// shuflfling the array
 function shuffleArray(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]]; // Swap elements
+    [array[i], array[j]] = [array[j], array[i]];
   }
 }
 
+const treatableDiseases = [
+  "AIDS",
+  "Cancer",
+  "Ebola",
+  "Malaria",
+  "Tuberculosis",
+  "Yellow Fever",
+].sort();
+
+function binarySearch(arr, disease) {
+  let left = 0;
+  let right = arr.length - 1;
+
+  while (left <= right) {
+    const mid = left + Math.floor((right - left) / 2);
+    const midVal = arr[mid];
+
+    if (midVal === disease) {
+      return mid;
+    } else if (midVal < disease) {
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  return -1;
+}
 const corsOptions = {
   origin: "*",
   optionsSuccessStatus: 200,
@@ -106,9 +132,13 @@ app.post("/clients/new", async (req, res) => {
   }
 });
 
+function getFirstTenHospitals(inputArray) {
+  return inputArray.slice(0, 10);
+}
+
 // Get hospitals/health facilities within given radius using googlemaps
-app.get("/near-by-places", async (req, res) => {
-  console.log("req.query", req.query);
+// TODO: include the pre check middle to check for disease with associated hospitals
+app.get("/near-by-places", authorize, async (req, res) => {
   const latitude = req.query.latitude;
   const longitude = req.query.longitude;
   const disease = req.query.disease;
@@ -117,15 +147,59 @@ app.get("/near-by-places", async (req, res) => {
     if (!latitude || !longitude) {
       return res.status(400).json({
         success: false,
-        message: "Please provide location co-ordinates",
+        message: "Please provide location coordinates",
       });
     }
-    if (!disease) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide a disease",
+
+    // Check if disease is provided and commonly treated in Uganda
+    if (disease) {
+      const formattedDisease =
+        disease.charAt(0).toUpperCase() + disease.slice(1).toLowerCase();
+      const isTreatable =
+        binarySearch(treatableDiseases, formattedDisease) !== -1;
+
+      // If the disease is not treatable in Uganda, return a message indicating so
+      if (!isTreatable) {
+        return res.status(400).json({
+          success: true,
+          message: `The disease '${formattedDisease}' is not commonly treated in Uganda.`,
+          data: [],
+        });
+      }
+    } else {
+      return res
+        .status(400)
+        .json({ success: false, message: "Please provide a disease" });
+    }
+
+    const email = res.locals.key;
+    const resultKey = `${disease.toLocaleLowerCase()}-${email}`;
+    console.log("resultKey", resultKey);
+    // check for disease in the database
+    const dbSearchResults = await db.collection("searchresults").get(resultKey);
+
+    const isExpiredSearchResults =
+      new Date(Date.now()) > new Date(dbSearchResults?.props.expiresAt);
+
+    // delete when results are expired
+    if (isExpiredSearchResults) {
+      await db.collection("searchresults").delete(resultKey);
+    }
+
+    // Return search results from the database
+    if (
+      dbSearchResults?.props.latitude == latitude &&
+      dbSearchResults?.props.longitude == longitude &&
+      !isExpiredSearchResults
+    ) {
+      return res.status(200).json({
+        success: true,
+        message: "Health facilities found successfully",
+        data: dbSearchResults.props.searchResults,
       });
     }
+
+    // Proceed with finding health facilities
     const healthFacilities = await client.placesNearby({
       params: {
         location: `${latitude}, ${longitude}`,
@@ -134,18 +208,35 @@ app.get("/near-by-places", async (req, res) => {
         types: ["hospital", "health"],
       },
     });
+
     if (healthFacilities.statusText !== "OK") {
       return res
         .status(400)
-        .json({ success: false, message: "could not find places" });
+        .json({ success: false, message: "Could not find places" });
     }
 
     // shuffle the array
     shuffleArray(healthFacilities.data.results);
+    // take first 10 hospitals
+    const hospitals = getFirstTenHospitals(healthFacilities.data.results);
+
+    healthFacilities.data.results = hospitals;
+
+    const params = {
+      latitude: latitude,
+      longitude: longitude,
+      disease: disease,
+      email: email,
+      searchResults: healthFacilities.data,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+
+    await db.collection("searchresults").set(resultKey, params);
 
     res.status(200).json({
       success: true,
-      message: "get health successfully",
+      message: "Health facilities found successfully",
       data: healthFacilities.data,
     });
   } catch (error) {
@@ -153,14 +244,13 @@ app.get("/near-by-places", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error." });
   }
 });
-
 app.post("/users/forgot-password", async (req, res) => {
   try {
     const email = req.body.email;
 
     if (!email) {
       return res
-        .status(200)
+        .status(400)
         .json({ success: false, message: "Please provide email" });
     }
     const user = await db.collection("doceaseclients").get(email);
@@ -199,7 +289,7 @@ app.post("/users/forgot-password", async (req, res) => {
     await new Email(email, subject).sendPasswordReset(resetURL, fullName);
 
     res.status(200).json({
-      status: "success",
+      success: true,
       message: "Password reset token sent to mail",
     });
   } catch (error) {
